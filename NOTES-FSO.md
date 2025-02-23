@@ -333,6 +333,7 @@ In a GraphQL Schema, an Enum defines a type that can take only a specific set of
 In GraphQL, it is possible to combine multiple fields of type `Query` (aka separate Queries) into 1 query.
 
 For example
+
 ```
 query {
   personCount
@@ -355,4 +356,159 @@ query {
 }
 ```
 
+# 2. React and GraphQL
 
+- Its a common practise to send GraphQL requests to `/graphql` instead of `/`.
+
+In practise we can use `axios` or `fetch` to send GraphQL requests, but in practise we use a higher order library to abstract away unnecessary details of the communication.
+
+**Apollo Client** is the most popular of the two.
+
+## 2.1 Apollo Client
+
+We use the following to create a `ApolloClient`
+
+```
+const client = new ApolloClient({
+  uri: 'http://localhost:4000',
+  cache: new InMemoryCache(),
+})
+```
+
+We use the following to send a query
+
+```
+const query = gql`
+  query {
+    allPersons  {
+      name,
+      phone,
+      address {
+        street,
+        city
+      }
+      id
+    }
+  }
+`
+
+client.query({ query })
+  .then((response) => {
+    console.log(response.data)
+  })
+```
+
+The application can communicate with a GraphQL server using the `client` object. The `client` can be made accessible to all component by wrapping the `App` within an `ApolloProvider`.
+
+## 2.2 Making Queries
+
+The most popular way to make query is by `useQuery` hook. It takes the actual query string as argument and returns the result.
+
+## 2.3 Named Queries and Variables
+
+We run the query `findPerson` to fetch details by name as follows
+
+```
+const result = useQuery(FIND_PERSON, {
+  variables: { nameToSearch },
+  skip: !nameToSearch,
+})
+```
+
+`skip` determines whether the query is to be run or not.
+`variables: { nameToSearch }, provides the params to the query
+
+## 2.4 Cache
+
+Apollo Client saves the result of query in a cache automatically.
+
+## 2.5 Doing Mutations
+
+`useMutation` hook is used for this.
+
+We define the function by using the hook `const [ createPerson ] = useMutation(CREATE_PERSON)`, and then call it within the event handler.
+
+Apollo Client does not automatically update the cache after causing the mutation.
+
+## 2.6 Updating the Cache
+
+- One way is short-polling. It causes needless web traffic.
+
+- Other is defining the mutation as following
+
+```
+const [ createPerson ] = useMutation(CREATE_PERSON, {
+    refetchQueries: [ { query: ALL_PERSONS } ]
+})
+```
+
+Now there is just one more request to get the new data from the server. However changes does not show to other users at the same time.
+
+One way to update cache is by defining a suitable callback function. Old Cache can cause hard to find problems.
+
+## 2.7 Apollo Client and the Application State
+
+Management of the App state becomes mostly the responsibility of the Apollo client.
+
+# 5. Fragments And Subscriptions
+
+# 5.1 Fragments
+
+It is pretty common in GraphQL that multiple queries return similar results. For example, the following 2 queries have a lot of common fields
+
+```
+query {
+  findPerson(name: "Pekka Mikkola") {
+    name
+    phone
+    address{
+      street 
+      city
+    }
+  }
+}
+```
+```
+query {
+  allPersons {
+    name
+    phone
+    address{
+      street 
+      city
+    }
+  }
+}
+```
+
+For this we define a **fragment** and use the query in a compact form.
+For eg:
+```
+fragment PersonDetails on Person {
+  name
+  phone 
+  address {
+    street 
+    city
+  }
+}
+
+query {
+  allPersons {
+    ...PersonDetails
+  }
+}
+
+query {
+  findPerson(name: "Pekka Mikkola") {
+    ...PersonDetails
+  }
+}
+```
+Fragments ARE NOT DEFINED on the server side.
+
+# 5.2 Subscriptions
+
+Along with `Query` and `Mutation` type, GraphQL offers a third operation type - `Subscription`. 
+
+With `Subscription` client can subscribe to changes in the server. When a change occurs on the server, the server sends a notification using **WebSocket** to all of its subscribers.
