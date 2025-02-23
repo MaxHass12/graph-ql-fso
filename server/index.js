@@ -1,5 +1,7 @@
 import { ApolloServer } from '@apollo/server';
 import { startStandaloneServer } from '@apollo/server/standalone';
+import { v1 as uuid } from 'uuid';
+import { GraphQLError } from 'graphql';
 
 let persons = [
   {
@@ -25,26 +27,92 @@ let persons = [
 ];
 
 const typeDefs = `
+  enum YesNo {
+    YES
+    NO
+  }
+  
+  type Address {
+    street: String!
+    city: String!
+  }
+
   type Person {
     name: String!
     phone: String
-    street: String!
-    city: String! 
+    address: Address!
     id: ID!
   }
 
   type Query {
     personCount: Int!
-    allPersons: [Person!]!
+    allPersons(phone: YesNo): [Person!]!
     findPerson(name: String!): Person
+  }
+
+  type Mutation {
+    addPerson(
+      name: String!
+      phone: String
+      street: String!
+      city: String!
+    ): Person
+    editNumber(
+      name: String!
+      phone: String!
+    ): Person
   }
 `;
 
 const resolvers = {
   Query: {
     personCount: () => persons.length,
-    allPersons: () => persons,
+    allPersons: (root, args) => {
+      if (!args.phone) {
+        return persons;
+      }
+      const byPhone = (person) =>
+        args.phone === 'YES' ? person.phone : !person.phone;
+      return persons.filter(byPhone);
+    },
     findPerson: (root, args) => persons.find((p) => p.name === args.name),
+  },
+
+  Mutation: {
+    addPerson: (root, args) => {
+      if (persons.find((p) => p.name === args.name)) {
+        throw new GraphQLError('Name must be unique', {
+          extensions: {
+            code: 'BAD_USER_INPUT',
+            invalidArgs: args.name,
+          },
+        });
+      }
+
+      const person = { ...args, id: uuid() };
+      persons = persons.concat(person);
+      return person;
+    },
+
+    editNumber: (root, args) => {
+      const person = persons.find((p) => p.name === args.name);
+      if (!person) {
+        return null;
+      }
+
+      const updatedPerson = { ...person, phone: args.phone };
+      persons = persons.map((p) => (p.name === args.name ? updatedPerson : p));
+      return updatedPerson;
+    },
+  },
+
+  Person: {
+    address: (root) => {
+      return {
+        street: root.street,
+        city: root.city,
+      };
+    },
   },
 };
 
